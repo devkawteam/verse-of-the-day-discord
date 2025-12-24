@@ -31,4 +31,4 @@ jobs:
               \"footer\": { \"text\": \"YouVersion Bible App\" }
             }]
           }" \
-          https://discord.com/api/webhooks/1453533982900621456/O8wpcThtSKr0Pb1pFb4zMPqmJIfnbWA1pxbtlfvh9rdDWt9TsQTngI102MWVcVLS0MN2
+          REPLACE_WITH_YOUR_DISCORD_WEBHOOK

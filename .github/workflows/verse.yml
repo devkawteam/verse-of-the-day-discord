@@ -31,4 +31,5 @@ jobs:
               \"footer\": { \"text\": \"YouVersion Bible App\" }
             }]
           }" \
-          REPLACE_WITH_YOUR_DISCORD_WEBHOOK
+          ${{ secrets.DISCORD_WEBHOOK }}
+

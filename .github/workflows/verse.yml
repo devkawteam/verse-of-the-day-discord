@@ -9,25 +9,32 @@ jobs:
   post-verse:
     runs-on: ubuntu-latest
     steps:
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.x"
+
+      - name: Install Python dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install feedparser requests
+
       - name: Fetch verse and post to Discord
         env:
           DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK }}
         run: |
-          python3 - << 'EOF'
+          python << 'EOF'
           import feedparser
           import requests
           import html
 
           FEED_URL = "https://www.bible.com/verse-of-the-day/rss"
-
           feed = feedparser.parse(FEED_URL)
 
           if not feed.entries:
               raise Exception("No entries found in RSS feed")
 
           entry = feed.entries[0]
-
-          title = html.unescape(entry.title)
           description = html.unescape(entry.summary)
 
           payload = {

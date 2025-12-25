@@ -1,4 +1,4 @@
-name: Verse of the Day to Discord (Test-Safe)
+name: Verse of the Day to Discord
 
 on:
   workflow_dispatch:
@@ -9,13 +9,15 @@ jobs:
   post-verse:
     runs-on: ubuntu-latest
     steps:
-      - name: Post verse to Discord
+      - name: Post Verse of the Day
         env:
           DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK }}
         run: |
+          VERSE=$(curl -s https://beta.ourmanna.com/api/v1/get/?format=text)
+
           curl -X POST \
             -H "Content-Type: application/json" \
-            -d '{
-              "content": "📖 Verse of the Day\n\n\"Your word is a lamp to my feet and a light to my path.\"\n— Psalm 119:105"
-            }' \
-            "$DISCORD_WEBHOOK"
+            -d "{
+              \"content\": \"📖 **Verse of the Day**\n\n$VERSE\"
+            }" \
+            \"$DISCORD_WEBHOOK\"

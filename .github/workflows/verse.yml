@@ -1,9 +1,9 @@
-name: Verse of the Day to Discord
+name: Verse of the Day to Multiple Discords
 
 on:
   workflow_dispatch:
   schedule:
-    - cron: "0 11 * * *" # 7am Eastern
+    - cron: "0 11 * * *" # 7:00 AM Eastern
 
 jobs:
   post-verse:
@@ -11,13 +11,23 @@ jobs:
     steps:
       - name: Post Verse of the Day
         env:
-          DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK }}
+          DISCORD_WEBHOOK_MAIN: ${{ secrets.DISCORD_WEBHOOK_MAIN }}
+          DISCORD_WEBHOOK_TWO: ${{ secrets.DISCORD_WEBHOOK_TWO }}
+          DISCORD_WEBHOOK_THREE: ${{ secrets.DISCORD_WEBHOOK_THREE }}
         run: |
           VERSE=$(curl -s https://beta.ourmanna.com/api/v1/get/?format=text)
 
           curl -X POST \
             -H "Content-Type: application/json" \
-            -d "{
-              \"content\": \"📖 **Verse of the Day**\n\n$VERSE\"
-            }" \
-            \"$DISCORD_WEBHOOK\"
+            -d "{\"content\":\"📖 **Verse of the Day**\n\n$VERSE\"}" \
+            "$DISCORD_WEBHOOK_MAIN"
+
+          curl -X POST \
+            -H "Content-Type: application/json" \
+            -d "{\"content\":\"📖 **Verse of the Day**\n\n$VERSE\"}" \
+            "$DISCORD_WEBHOOK_TWO"
+
+          curl -X POST \
+            -H "Content-Type: application/json" \
+            -d "{\"content\":\"📖 **Verse of the Day**\n\n$VERSE\"}" \
+            "$DISCORD_WEBHOOK_THREE"

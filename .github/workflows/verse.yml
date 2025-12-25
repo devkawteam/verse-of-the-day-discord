@@ -9,27 +9,48 @@ jobs:
   post-verse:
     runs-on: ubuntu-latest
     steps:
-      - name: Install tools
-        run: sudo apt-get update && sudo apt-get install -y libxml2-utils
-
-      - name: Fetch Verse of the Day
+      - name: Fetch verse and post to Discord
+        env:
+          DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK }}
         run: |
-          curl -s https://www.bible.com/verse-of-the-day/rss > verse.xml
+          python3 - << 'EOF'
+          import feedparser
+          import requests
+          import html
 
-      - name: Post to Discord
-        run: |
-          TITLE=$(xmllint --xpath 'string(//item/title)' verse.xml)
-          CONTENT=$(xmllint --xpath 'string(//item/description)' verse.xml)
+          FEED_URL = "https://www.bible.com/verse-of-the-day/rss"
 
-          curl -H "Content-Type: application/json" \
-          -X POST \
-          -d "{
-            \"embeds\": [{
-              \"title\": \"📖 Verse of the Day\",
-              \"description\": \"$CONTENT\",
-              \"color\": 7506394,
-              \"footer\": { \"text\": \"YouVersion Bible App\" }
-            }]
-          }" \
-          ${{ secrets.DISCORD_WEBHOOK }}
+          feed = feedparser.parse(FEED_URL)
 
+          if not feed.entries:
+              raise Exception("No entries found in RSS feed")
+
+          entry = feed.entries[0]
+
+          title = html.unescape(entry.title)
+          description = html.unescape(entry.summary)
+
+          payload = {
+              "embeds": [
+                  {
+                      "title": "📖 Verse of the Day",
+                      "description": description,
+                      "color": 7506394,
+                      "image": {
+                          "url": "https://source.unsplash.com/1200x675/?bible,faith,scripture"
+                      },
+                      "footer": {
+                          "text": "YouVersion Bible App"
+                      }
+                  }
+              ]
+          }
+
+          response = requests.post(
+              DISCORD_WEBHOOK,
+              json=payload,
+              timeout=10
+          )
+
+          response.raise_for_status()
+          EOF

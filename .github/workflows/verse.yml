@@ -9,7 +9,7 @@ jobs:
   post-verse:
     runs-on: ubuntu-latest
     steps:
-      - name: Post Verse of the Day
+      - name: Post Verse of the Day (custom per Discord)
         env:
           DISCORD_WEBHOOK_MAIN: ${{ secrets.DISCORD_WEBHOOK_MAIN }}
           DISCORD_WEBHOOK_TWO: ${{ secrets.DISCORD_WEBHOOK_TWO }}
@@ -17,17 +17,20 @@ jobs:
         run: |
           VERSE=$(curl -s https://beta.ourmanna.com/api/v1/get/?format=text)
 
-          curl -X POST \
-            -H "Content-Type: application/json" \
-            -d "{\"content\":\"📖 **Verse of the Day**\n\n$VERSE\"}" \
+          MESSAGE_MAIN="📖 **Verse of the Day**\n━━━━━━━━━━━━━━\n$VERSE\n━━━━━━━━━━━━━━\n🙏 Take a moment to reflect."
+
+          MESSAGE_TWO="🙏 **Daily Scripture**\n━━━━━━━━━━━━━━\n$VERSE\n━━━━━━━━━━━━━━\n🕊️ Be encouraged today."
+
+          MESSAGE_THREE="✨ **Scripture for Today**\n━━━━━━━━━━━━━━\n$VERSE\n━━━━━━━━━━━━━━\n💬 Feel free to share your thoughts."
+
+          curl -X POST -H "Content-Type: application/json" \
+            -d "{\"content\":\"$MESSAGE_MAIN\"}" \
             "$DISCORD_WEBHOOK_MAIN"
 
-          curl -X POST \
-            -H "Content-Type: application/json" \
-            -d "{\"content\":\"📖 **Verse of the Day**\n\n$VERSE\"}" \
+          curl -X POST -H "Content-Type: application/json" \
+            -d "{\"content\":\"$MESSAGE_TWO\"}" \
             "$DISCORD_WEBHOOK_TWO"
 
-          curl -X POST \
-            -H "Content-Type: application/json" \
-            -d "{\"content\":\"📖 **Verse of the Day**\n\n$VERSE\"}" \
+          curl -X POST -H "Content-Type: application/json" \
+            -d "{\"content\":\"$MESSAGE_THREE\"}" \
             "$DISCORD_WEBHOOK_THREE"

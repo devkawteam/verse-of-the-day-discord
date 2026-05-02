@@ -8,29 +8,88 @@ on:
 jobs:
   post-verse:
     runs-on: ubuntu-latest
+
     steps:
-      - name: Post Verse of the Day (custom per Discord)
+      - name: Post Verse of the Day
         env:
           DISCORD_WEBHOOK_MAIN: ${{ secrets.DISCORD_WEBHOOK_MAIN }}
           DISCORD_WEBHOOK_TWO: ${{ secrets.DISCORD_WEBHOOK_TWO }}
           DISCORD_WEBHOOK_THREE: ${{ secrets.DISCORD_WEBHOOK_THREE }}
+
         run: |
           VERSE=$(curl -s https://beta.ourmanna.com/api/v1/get/?format=text)
 
-          MESSAGE_MAIN="📖 **Verse of the Day**\n━━━━━━━━━━━━━━\n$VERSE\n━━━━━━━━━━━━━━\n🙏 Take a moment to reflect."
+          DATE=$(date +"%B %d, %Y")
+          TIMESTAMP=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
 
-          MESSAGE_TWO="🙏 **Daily Scripture**\n━━━━━━━━━━━━━━\n$VERSE\n━━━━━━━━━━━━━━\n🕊️ Be encouraged today."
+          ########################################
+          # MAIN DISCORD
+          ########################################
+          curl -H "Content-Type: application/json" -X POST \
+          -d "{
+            \"username\": \"KAW Scripture Bot\",
+            \"embeds\": [{
+              \"title\": \"📖 Verse of the Day\",
+              \"description\": \"$VERSE\",
+              \"color\": 3447003,
+              \"fields\": [
+                {
+                  \"name\": \"🙏 Reflection\",
+                  \"value\": \"Take a quiet moment to reflect on today's message.\"
+                }
+              ],
+              \"footer\": {
+                \"text\": \"KAW Daily Scripture • $DATE\"
+              },
+              \"timestamp\": \"$TIMESTAMP\"
+            }]
+          }" \
+          "$DISCORD_WEBHOOK_MAIN"
 
-          MESSAGE_THREE="✨ **Scripture for Today**\n━━━━━━━━━━━━━━\n$VERSE\n━━━━━━━━━━━━━━\n💬 Feel free to share your thoughts."
+          ########################################
+          # SECOND DISCORD
+          ########################################
+          curl -H "Content-Type: application/json" -X POST \
+          -d "{
+            \"username\": \"Daily Encouragement\",
+            \"embeds\": [{
+              \"title\": \"🕊️ Daily Scripture\",
+              \"description\": \"$VERSE\",
+              \"color\": 5763719,
+              \"fields\": [
+                {
+                  \"name\": \"✨ Encouragement\",
+                  \"value\": \"Carry this verse with you throughout your day.\"
+                }
+              ],
+              \"footer\": {
+                \"text\": \"God's Word • $DATE\"
+              },
+              \"timestamp\": \"$TIMESTAMP\"
+            }]
+          }" \
+          "$DISCORD_WEBHOOK_TWO"
 
-          curl -X POST -H "Content-Type: application/json" \
-            -d "{\"content\":\"$MESSAGE_MAIN\"}" \
-            "$DISCORD_WEBHOOK_MAIN"
-
-          curl -X POST -H "Content-Type: application/json" \
-            -d "{\"content\":\"$MESSAGE_TWO\"}" \
-            "$DISCORD_WEBHOOK_TWO"
-
-          curl -X POST -H "Content-Type: application/json" \
-            -d "{\"content\":\"$MESSAGE_THREE\"}" \
-            "$DISCORD_WEBHOOK_THREE"
+          ########################################
+          # THIRD DISCORD
+          ########################################
+          curl -H "Content-Type: application/json" -X POST \
+          -d "{
+            \"username\": \"Morning Scripture\",
+            \"embeds\": [{
+              \"title\": \"🌅 Scripture for Today\",
+              \"description\": \"$VERSE\",
+              \"color\": 15844367,
+              \"fields\": [
+                {
+                  \"name\": \"💬 Discussion\",
+                  \"value\": \"What does this verse mean to you today?\"
+                }
+              ],
+              \"footer\": {
+                \"text\": \"Daily Inspiration • $DATE\"
+              },
+              \"timestamp\": \"$TIMESTAMP\"
+            }]
+          }" \
+          "$DISCORD_WEBHOOK_THREE"

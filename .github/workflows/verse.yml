@@ -2,94 +2,163 @@ name: Verse of the Day to Multiple Discords
 
 on:
   workflow_dispatch:
+    inputs:
+      destination:
+        description: Discord destination for this manual run
+        required: true
+        default: all
+        type: choice
+        options:
+          - all
+          - main
+          - two
+          - three
   schedule:
-    - cron: "0 11 * * *" # 7:00 AM Eastern
+    # 7:00 AM Eastern: the script ignores the extra DST/standard-time run.
+    - cron: "0 11,12 * * *"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: daily-scripture
+  cancel-in-progress: false
 
 jobs:
   post-verse:
     runs-on: ubuntu-latest
-
+    timeout-minutes: 5
     steps:
       - name: Post Verse of the Day
         env:
           DISCORD_WEBHOOK_MAIN: ${{ secrets.DISCORD_WEBHOOK_MAIN }}
           DISCORD_WEBHOOK_TWO: ${{ secrets.DISCORD_WEBHOOK_TWO }}
           DISCORD_WEBHOOK_THREE: ${{ secrets.DISCORD_WEBHOOK_THREE }}
-
+          EVENT_NAME: ${{ github.event_name }}
+          MANUAL_DESTINATION: ${{ inputs.destination || 'all' }}
         run: |
-          VERSE=$(curl -s https://beta.ourmanna.com/api/v1/get/?format=text)
+          python3 - <<'PY'
+          import json, os, sys, time
+          import urllib.error, urllib.request
+          from datetime import datetime
+          from zoneinfo import ZoneInfo
 
-          DATE=$(date +"%B %d, %Y")
-          TIMESTAMP=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+          now = datetime.now(ZoneInfo("America/New_York"))
+          if os.environ.get("EVENT_NAME") != "workflow_dispatch" and now.hour != 7:
+              print(f"Skipping duplicate schedule at {now:%I:%M %p %Z}.")
+              sys.exit(0)
 
-          ########################################
-          # MAIN DISCORD
-          ########################################
-          curl -H "Content-Type: application/json" -X POST \
-          -d "{
-            \"username\": \"KAW Scripture Bot\",
-            \"embeds\": [{
-              \"title\": \"📖 Verse of the Day\",
-              \"description\": \"$VERSE\",
-              \"color\": 3447003,
-              \"fields\": [
-                {
-                  \"name\": \"🙏 Reflection\",
-                  \"value\": \"Take a quiet moment to reflect on today's message.\"
-                }
-              ],
-              \"footer\": {
-                \"text\": \"KAW Daily Scripture • $DATE\"
+          def fetch_verse():
+              url = "https://beta.ourmanna.com/api/v1/get/?format=text"
+              last_error = None
+              for attempt in range(1, 4):
+                  try:
+                      request = urllib.request.Request(url, headers={"User-Agent": "KAW-Scripture-Bot/2.0"})
+                      with urllib.request.urlopen(request, timeout=15) as response:
+                          verse = response.read().decode("utf-8").strip()
+                      if len(verse) < 10:
+                          raise ValueError("Verse provider returned an incomplete response")
+                      return verse
+                  except (OSError, ValueError, urllib.error.URLError) as error:
+                      last_error = error
+                      print(f"Verse request {attempt}/3 failed: {error}")
+                      if attempt < 3:
+                          time.sleep(attempt * 2)
+              raise RuntimeError(f"Unable to retrieve today's verse: {last_error}")
+
+          def post(destination, verse, date_text, timestamp):
+              webhook = os.environ.get(destination["secret"], "").strip()
+              if not webhook:
+                  raise RuntimeError(f'Missing secret {destination["secret"]}')
+              day = now.weekday()
+              payload = {
+                  "username": destination["username"],
+                  "embeds": [{
+                      "title": destination["titles"][day],
+                      "description": verse,
+                      "color": destination["color"],
+                      "fields": [{"name": destination["fields"][day], "value": destination["messages"][day]}],
+                      "footer": {"text": f'{destination["footer"]} • {date_text}'},
+                      "timestamp": timestamp,
+                  }],
+              }
+              request = urllib.request.Request(
+                  webhook, data=json.dumps(payload, ensure_ascii=False).encode(),
+                  headers={"Content-Type": "application/json", "User-Agent": "KAW-Scripture-Bot/2.0"},
+                  method="POST",
+              )
+              try:
+                  with urllib.request.urlopen(request, timeout=15) as response:
+                      if response.status not in (200, 204):
+                          raise RuntimeError(f"Discord returned HTTP {response.status}")
+              except urllib.error.HTTPError as error:
+                  detail = error.read().decode(errors="replace")[:300]
+                  raise RuntimeError(f"Discord returned HTTP {error.code}: {detail}") from error
+              print(f'Posted successfully to {destination["label"]}.')
+
+          destinations = [
+              {
+                  "label": "Main Discord", "secret": "DISCORD_WEBHOOK_MAIN",
+                  "username": "KAW Scripture Bot", "color": 3447003, "footer": "KAW Daily Scripture",
+                  "titles": ["🌤️ A Word for Monday", "🌱 Tuesday Truth", "🛡️ Midweek Strength", "🕊️ Thursday Peace", "✨ Friday Faith", "🌿 Saturday Reflection", "🙏 Sunday Scripture"],
+                  "fields": ["🎯 Start the Week", "💭 Pause & Consider", "💪 Carry This Today", "🙏 A Moment of Prayer", "✨ Finish in Faith", "🌿 Be Still", "❤️ Worship & Reflect"],
+                  "messages": [
+                      "Let this truth shape the way you step into the week ahead.",
+                      "Where might God be inviting you to trust Him more today?",
+                      "When the week feels heavy, return to the promise in this verse.",
+                      "Lord, help us receive Your Word and live it with grace today. Amen.",
+                      "Carry this reminder with you as the week draws to a close.",
+                      "Make room today to be quiet, breathe, and listen for what God is saying.",
+                      "How does this passage draw your heart closer to God today?",
+                  ],
               },
-              \"timestamp\": \"$TIMESTAMP\"
-            }]
-          }" \
-          "$DISCORD_WEBHOOK_MAIN"
-
-          ########################################
-          # SECOND DISCORD
-          ########################################
-          curl -H "Content-Type: application/json" -X POST \
-          -d "{
-            \"username\": \"Daily Encouragement\",
-            \"embeds\": [{
-              \"title\": \"🕊️ Daily Scripture\",
-              \"description\": \"$VERSE\",
-              \"color\": 5763719,
-              \"fields\": [
-                {
-                  \"name\": \"✨ Encouragement\",
-                  \"value\": \"Carry this verse with you throughout your day.\"
-                }
-              ],
-              \"footer\": {
-                \"text\": \"God's Word • $DATE\"
+              {
+                  "label": "Second Discord", "secret": "DISCORD_WEBHOOK_TWO",
+                  "username": "Daily Encouragement", "color": 5763719, "footer": "God's Word",
+                  "titles": ["☀️ Monday Encouragement", "🌼 Truth for Today", "🕊️ Midweek Encouragement", "🌤️ A Fresh Reminder", "✨ Friday Hope", "🌻 Weekend Encouragement", "💛 Sunday Hope"],
+                  "fields": ["🌱 Begin with Hope", "💛 Keep It Close", "🫶 You Are Not Alone", "🌈 Look for Grace", "🙌 Hold On to Hope", "☕ Rest in This", "🕯️ Hope for the Week Ahead"],
+                  "messages": [
+                      "Whatever this week holds, you do not walk into it alone.",
+                      "Keep these words nearby and let them steady your heart today.",
+                      "If today feels difficult, let this verse remind you that God is near.",
+                      "Watch for one small way this truth shows up in your day.",
+                      "Take this hope into the weekend—you may be the encouragement someone needs.",
+                      "Slow down and let these words bring rest to your mind and heart.",
+                      "May this promise renew your hope and prepare your heart for a new week.",
+                  ],
               },
-              \"timestamp\": \"$TIMESTAMP\"
-            }]
-          }" \
-          "$DISCORD_WEBHOOK_TWO"
-
-          ########################################
-          # THIRD DISCORD
-          ########################################
-          curl -H "Content-Type: application/json" -X POST \
-          -d "{
-            \"username\": \"Morning Scripture\",
-            \"embeds\": [{
-              \"title\": \"🌅 Scripture for Today\",
-              \"description\": \"$VERSE\",
-              \"color\": 15844367,
-              \"fields\": [
-                {
-                  \"name\": \"💬 Discussion\",
-                  \"value\": \"What does this verse mean to you today?\"
-                }
-              ],
-              \"footer\": {
-                \"text\": \"Daily Inspiration • $DATE\"
+              {
+                  "label": "Third Discord", "secret": "DISCORD_WEBHOOK_THREE",
+                  "username": "Morning Scripture", "color": 15844367, "footer": "Daily Inspiration",
+                  "titles": ["🌅 Monday Morning Word", "📖 Tuesday's Scripture", "🔥 Midweek Word", "🌄 Thursday Morning Truth", "🎉 Friday's Scripture", "☀️ Saturday Word", "⛪ Sunday Morning Scripture"],
+                  "fields": ["💬 Today's Question", "🧭 Put It into Practice", "💬 Talk About It", "👣 One Step Today", "🎮 Take It with You", "🤝 Share the Word", "💬 Sunday Discussion"],
+                  "messages": [
+                      "What word or phrase stands out to you as this week begins?",
+                      "What is one practical way you can live out this verse today?",
+                      "How would you explain this verse to someone who needed encouragement?",
+                      "What is one choice you can make today because this verse is true?",
+                      "Where could this message make a difference in your conversations today?",
+                      "Who might need to hear this verse? Consider sharing it with them.",
+                      "What does this passage reveal about God, and how will you respond?",
+                  ],
               },
-              \"timestamp\": \"$TIMESTAMP\"
-            }]
-          }" \
-          "$DISCORD_WEBHOOK_THREE"
+          ]
+
+          verse = fetch_verse()
+          date_text = now.strftime("%B %d, %Y").replace(" 0", " ")
+          timestamp = now.astimezone(ZoneInfo("UTC")).isoformat().replace("+00:00", "Z")
+          failures = []
+          for destination in destinations:
+              selected = os.environ.get("MANUAL_DESTINATION", "all")
+              destination_key = destination["secret"].removeprefix("DISCORD_WEBHOOK_").lower()
+              if selected != "all" and selected != destination_key:
+                  continue
+              try:
+                  post(destination, verse, date_text, timestamp)
+              except Exception as error:
+                  failures.append(f'{destination["label"]}: {error}')
+                  print(f'Failed to post to {destination["label"]}: {error}', file=sys.stderr)
+          if failures:
+              raise RuntimeError("One or more posts failed: " + " | ".join(failures))
+          PY
+

@@ -1,0 +1,188 @@
+name: Evening Checkpoint to Multiple Discords
+
+on:
+  workflow_dispatch:
+    inputs:
+      destination:
+        description: Discord destination for this manual run
+        required: true
+        default: all
+        type: choice
+        options: [all, main, two, three]
+  schedule:
+    # 6:00 PM Eastern: the script ignores the extra DST/standard-time run.
+    - cron: "0 22,23 * * *"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: evening-checkpoint
+  cancel-in-progress: false
+
+jobs:
+  post-evening-checkpoint:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Post Evening Checkpoint
+        env:
+          DISCORD_WEBHOOK_MAIN: ${{ secrets.DISCORD_WEBHOOK_MAIN }}
+          DISCORD_WEBHOOK_TWO: ${{ secrets.DISCORD_WEBHOOK_TWO }}
+          DISCORD_WEBHOOK_THREE: ${{ secrets.DISCORD_WEBHOOK_THREE }}
+          EVENT_NAME: ${{ github.event_name }}
+          MANUAL_DESTINATION: ${{ inputs.destination || 'all' }}
+        run: |
+          python3 - <<'PY'
+          import json, os, sys, urllib.error, urllib.request
+          from datetime import datetime
+          from zoneinfo import ZoneInfo
+
+          now = datetime.now(ZoneInfo("America/New_York"))
+          if os.environ.get("EVENT_NAME") != "workflow_dispatch" and now.hour != 18:
+              print(f"Skipping duplicate schedule at {now:%I:%M %p %Z}.")
+              sys.exit(0)
+
+          weekday = now.weekday()
+          week_rotation = (now.toordinal() // 7) % 5
+          date_text = now.strftime("%B %d, %Y").replace(" 0", " ")
+          timestamp = now.astimezone(ZoneInfo("UTC")).isoformat().replace("+00:00", "Z")
+
+          image_names = ["campfire-checkpoint.jpg", "starlit-path.jpg", "moonlit-stream.jpg"]
+          image_url = None
+          if weekday in (1, 3, 5):
+              image_name = image_names[(now.toordinal() // 7) % len(image_names)]
+              image_url = (
+                  "https://raw.githubusercontent.com/devkawteam/verse-of-the-day-discord/"
+                  f"main/.github/assets/evening/{image_name}"
+              )
+
+          common_prompts = [
+              "What is one good thing that happened today—even if it was small?",
+              "How did someone show you kindness today, or how did you show it to someone else?",
+              "What can you release tonight instead of carrying into tomorrow?",
+              "Who deserves a little encouragement from you this evening?",
+              "What is one lesson from today that can help you tomorrow?",
+              "What win beyond the scoreboard are you proud of this week?",
+              "What would help you enter the new week with peace and purpose?",
+          ]
+
+          destinations = [
+              {
+                  "key": "main", "label": "KAW Discord", "secret": "DISCORD_WEBHOOK_MAIN",
+                  "username": "KAW Evening Encouragement", "color": 3447003,
+                  "footer": "KAW Evening Checkpoint",
+                  "titles": ["🌙 Monday Evening Reset", "🤝 Teammate Tuesday", "🛡️ Midweek Strength", "🙏 Thursday Gratitude", "✨ Wins Beyond the Scoreboard", "🔥 Saturday Campfire", "🕊️ Sunday Peace"],
+                  "openers": [
+                      "The first quest of the week is complete. Take a breath and remember: God is present in both the progress and the pauses.",
+                      "Strong communities are built through patience, kindness, and people willing to lift one another up.",
+                      "If the week feels heavy, you do not have to carry it alone. God meets us in the middle of the journey.",
+                      "Pause tonight and notice the good gifts that were easy to miss while the day was moving quickly.",
+                      "Not every meaningful victory appears on a scoreboard. Growth, honesty, courage, and compassion count too.",
+                      "Pull up a seat at the evening campfire. Rest is not wasted time; it prepares us to serve and begin again.",
+                      "Before a new week begins, let your heart grow quiet. God's grace is already waiting in tomorrow.",
+                  ],
+                  "rotations": [
+                      "Your value was never determined by today's wins or losses. You are loved, you are learning, and tomorrow carries new mercy.",
+                      "You may not see the full effect of your kindness, but God can use one patient word to change the direction of someone's day.",
+                      "You do not need every answer tonight. Be faithful with the next good step and trust God with what remains unseen.",
+                      "A difficult day is not a defeated life. Let God restore your strength, renew your mind, and give you courage for tomorrow.",
+                      "The best teammate is not always the loudest or most skilled—it is often the one who makes room, offers grace, and helps others rise.",
+                  ],
+                  "closing": "🙏 Lord, give us peaceful hearts, restorative rest, and opportunities to encourage others. Amen.",
+              },
+              {
+                  "key": "two", "label": "Second Discord", "secret": "DISCORD_WEBHOOK_TWO",
+                  "username": "Evening Encouragement", "color": 5763719,
+                  "footer": "An Evening Word of Hope",
+                  "titles": ["🌙 Monday Reset", "💛 Kindness Check", "🌿 Midweek Recharge", "🌈 Gratitude Tonight", "✨ Quiet Victories", "☕ Weekend Pause", "🕯️ Peace for the Week Ahead"],
+                  "openers": [
+                      "You made it through the first stretch of the week. Let tonight be a chance to breathe and begin restoring your energy.",
+                      "A good community grows whenever someone chooses patience, inclusion, and kindness.",
+                      "You have reached the middle of the week. It is okay to slow down, reset, and ask for support.",
+                      "Even on complicated days, there is often one small piece of goodness worth noticing.",
+                      "Some victories are quiet: setting a boundary, trying again, apologizing, or simply getting through a hard day.",
+                      "Tonight does not need to be productive. Rest, laughter, and time with good people have value too.",
+                      "A new week does not require a perfect version of you—only a willing heart and one healthy next step.",
+                  ],
+                  "rotations": [
+                      "Your worth is bigger than today's performance. Learn what you can, release what you cannot change, and be gentle with yourself.",
+                      "Encouragement costs little but can mean everything. One sincere message may be exactly what someone needs tonight.",
+                      "Progress is rarely a straight line. Pausing to recover is part of moving forward, not proof that you have fallen behind.",
+                      "You are allowed to have difficult moments without calling yourself a failure. Tomorrow is another opportunity to grow.",
+                      "Real strength includes empathy, honesty, and knowing when to help someone else carry the load.",
+                  ],
+                  "closing": "💛 Rest well, take care of yourself, and remember that your presence matters.",
+              },
+              {
+                  "key": "three", "label": "Third Discord", "secret": "DISCORD_WEBHOOK_THREE",
+                  "username": "Evening Checkpoint", "color": 15844367,
+                  "footer": "Community Checkpoint",
+                  "titles": ["🎮 Quest Log: Monday Complete", "🤝 Co-op Challenge", "🔋 Midweek Recharge", "🏆 Gratitude Achievement", "⭐ Wins Beyond the Rank", "🔥 Campfire Check-In", "🧭 Ready for the Next Quest"],
+                  "openers": [
+                      "Monday's quest log is saved. Step away from the grind for a moment and check in with the person behind the player tag.",
+                      "Tonight's co-op challenge: be the teammate who stays patient, includes others, and makes the lobby better.",
+                      "Low energy is not a character flaw. Find a safe checkpoint, recharge, and return when you are ready.",
+                      "Unlock tonight's gratitude achievement by noticing one person, moment, or opportunity that made today better.",
+                      "Your rank tells only a tiny part of the story. Celebrate the ways you grew, helped, learned, or kept going.",
+                      "Welcome to the weekend campfire. No leaderboard, no pressure—just a chance to breathe and connect.",
+                      "Before loading the next week's map, choose one value you want guiding your decisions and conversations.",
+                  ],
+                  "rotations": [
+                      "A loss is feedback, not an identity. Save what you learned, leave the frustration at the checkpoint, and try again when rested.",
+                      "The strongest communities are not built by perfect players. They are built by people who communicate, forgive mistakes, and share the win.",
+                      "You do not have to speedrun your growth. Sustainable progress comes from practice, patience, and good rest.",
+                      "If today was a difficult level, surviving it still counts. Reset your loadout, ask for help, and approach tomorrow one step at a time.",
+                      "Skill earns highlights; character earns trust. Be the player people are glad to see join the team.",
+                  ],
+                  "closing": "🫶 Hydrate, stretch, rest your eyes, and send one good message before logging off.",
+              },
+          ]
+
+          def post(destination):
+              webhook = os.environ.get(destination["secret"], "").strip()
+              if not webhook:
+                  raise RuntimeError(f'Missing secret {destination["secret"]}')
+              embed = {
+                  "title": destination["titles"][weekday],
+                  "description": destination["openers"][weekday],
+                  "color": destination["color"],
+                  "fields": [
+                      {"name": "💫 Tonight's Encouragement", "value": destination["rotations"][week_rotation]},
+                      {"name": "💬 Community Check-In", "value": common_prompts[weekday]},
+                      {"name": "🌙 Before You Log Off", "value": destination["closing"]},
+                  ],
+                  "footer": {"text": f'{destination["footer"]} • {date_text}'},
+                  "timestamp": timestamp,
+              }
+              if image_url:
+                  embed["image"] = {"url": image_url}
+              payload = {"username": destination["username"], "embeds": [embed]}
+              request = urllib.request.Request(
+                  webhook, data=json.dumps(payload, ensure_ascii=False).encode(),
+                  headers={"Content-Type": "application/json", "User-Agent": "KAW-Evening-Bot/1.0"},
+                  method="POST",
+              )
+              try:
+                  with urllib.request.urlopen(request, timeout=20) as response:
+                      if response.status not in (200, 204):
+                          raise RuntimeError(f"Discord returned HTTP {response.status}")
+              except urllib.error.HTTPError as error:
+                  detail = error.read().decode(errors="replace")[:300]
+                  raise RuntimeError(f"Discord returned HTTP {error.code}: {detail}") from error
+              print(f'Posted successfully to {destination["label"]}.')
+
+          selected = os.environ.get("MANUAL_DESTINATION", "all")
+          failures = []
+          for destination in destinations:
+              if selected != "all" and selected != destination["key"]:
+                  continue
+              try:
+                  post(destination)
+              except Exception as error:
+                  failures.append(f'{destination["label"]}: {error}')
+                  print(f'Failed to post to {destination["label"]}: {error}', file=sys.stderr)
+          if failures:
+              raise RuntimeError("One or more posts failed: " + " | ".join(failures))
+          PY
+

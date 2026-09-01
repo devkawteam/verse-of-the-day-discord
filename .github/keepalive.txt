@@ -1,0 +1,1 @@
+This file is updated automatically by the monthly keepalive workflow so scheduled GitHub Actions do not become disabled after prolonged repository inactivity.

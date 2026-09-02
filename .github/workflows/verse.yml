@@ -14,8 +14,8 @@ on:
           - two
           - three
   schedule:
-    # Run once each morning in Eastern Time. 7:07 avoids GitHub's busier top-of-hour window.
-    - cron: "7 7 * * *"
+    # Run once each morning at 7:00 AM Eastern Time.
+    - cron: "0 7 * * *"
       timezone: "America/New_York"
 
 permissions:

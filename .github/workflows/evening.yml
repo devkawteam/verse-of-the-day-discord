@@ -10,8 +10,9 @@ on:
         type: choice
         options: [all, main, two, three]
   schedule:
-    # 6:00 PM Eastern: the script ignores the extra DST/standard-time run.
-    - cron: "0 22,23 * * *"
+    # Run once each evening at 6:00 PM Eastern Time.
+    - cron: "0 18 * * *"
+      timezone: "America/New_York"
 
 permissions:
   contents: read
@@ -30,7 +31,6 @@ jobs:
           DISCORD_WEBHOOK_MAIN: ${{ secrets.DISCORD_WEBHOOK_MAIN }}
           DISCORD_WEBHOOK_TWO: ${{ secrets.DISCORD_WEBHOOK_TWO }}
           DISCORD_WEBHOOK_THREE: ${{ secrets.DISCORD_WEBHOOK_THREE }}
-          EVENT_NAME: ${{ github.event_name }}
           MANUAL_DESTINATION: ${{ inputs.destination || 'all' }}
         run: |
           python3 - <<'PY'
@@ -39,9 +39,6 @@ jobs:
           from zoneinfo import ZoneInfo
 
           now = datetime.now(ZoneInfo("America/New_York"))
-          if os.environ.get("EVENT_NAME") != "workflow_dispatch" and now.hour != 18:
-              print(f"Skipping duplicate schedule at {now:%I:%M %p %Z}.")
-              sys.exit(0)
 
           weekday = now.weekday()
           week_rotation = (now.toordinal() // 7) % 5
@@ -160,7 +157,7 @@ jobs:
               payload = {"username": destination["username"], "embeds": [embed]}
               request = urllib.request.Request(
                   webhook, data=json.dumps(payload, ensure_ascii=False).encode(),
-                  headers={"Content-Type": "application/json", "User-Agent": "KAW-Evening-Bot/1.0"},
+                  headers={"Content-Type": "application/json", "User-Agent": "KAW-Evening-Bot/1.1"},
                   method="POST",
               )
               try:
@@ -170,19 +167,24 @@ jobs:
               except urllib.error.HTTPError as error:
                   detail = error.read().decode(errors="replace")[:300]
                   raise RuntimeError(f"Discord returned HTTP {error.code}: {detail}") from error
-              print(f'Posted successfully to {destination["label"]}.')
+              print(f'POSTED: {destination["label"]}')
 
           selected = os.environ.get("MANUAL_DESTINATION", "all")
           failures = []
+          posted = []
           for destination in destinations:
               if selected != "all" and selected != destination["key"]:
                   continue
               try:
                   post(destination)
+                  posted.append(destination["label"])
               except Exception as error:
                   failures.append(f'{destination["label"]}: {error}')
-                  print(f'Failed to post to {destination["label"]}: {error}', file=sys.stderr)
+                  print(f'FAILED: {destination["label"]}: {error}', file=sys.stderr)
+
+          print(f"Delivery summary: {len(posted)} posted, {len(failures)} failed.")
+          if posted:
+              print("Successful destinations: " + ", ".join(posted))
           if failures:
               raise RuntimeError("One or more posts failed: " + " | ".join(failures))
           PY
-
